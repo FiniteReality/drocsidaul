@@ -18,19 +18,19 @@ function _M.handleDispatch(client, dispatch, data)
 		copas.addthread(function()
 			while client.connected or client.connecting do
 				if client.sending_heartbeat then
-					client.priv.websocket:close(4011, "server missed last heartbeat")
+					client.priv.websocket:close(1000, "server missed last heartbeat")
 				end
 
 				client.sending_heartbeat = true
 
 				client.priv.heartbeat_start = socket.gettime()
 				
-				client:send{
+				client:send({
 					op = OPCODES.HEARTBEAT,
 					d = client.priv.sequence
-				}
+				})
 
-				copas.sleep(client.priv.heartbeat_interval / 1000)
+				copas.sleep(client.priv.heartbeat_interval / 1000, 100)
 				client.sending_heartbeat = false
 			end
 		end)
@@ -285,6 +285,8 @@ local OPCODE_HANDLERS = {
 		client.priv.sequence = payload.s
 		local dispatch = payload.t
 
+		--print("dispatch:", dispatch)
+
 		_M.handleDispatch(client, dispatch, payload.d)
 	end,
 	RECONNECT = function(client, payload)
@@ -298,6 +300,8 @@ function _M.handleJSON(client, payload)
 
 	local opcode = OPCODES[payload.op]
 	local handler = OPCODE_HANDLERS[opcode]
+
+	--print("opcode:", opcode)
 
 	if handler then
 		handler(client, payload)

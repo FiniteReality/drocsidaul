@@ -10,7 +10,7 @@ local _M = { }
 _M.BASE_URL = "https://discordapp.com/api%s"
 _M.API_VERSION = 6
 
-http.TIMEOUT = 30
+http.TIMEOUT = 60
 http.USERAGENT = ("DiscordBot (%s, %s)"):format(discord._URL, discord._VERSION)
 
 local function createEndpoint(endpoint, ...)
@@ -23,26 +23,94 @@ local function createEndpoint(endpoint, ...)
 	end
 end
 
-local function request(token, url, method, body, contentType)
-	local resp = {}
-	local reqt = {
-		url = url,
-		method = method or "GET",
-		sink = ltn12.sink.table(resp),
-		headers = {
-			["content-type"] = contentType or "application/json",
-			authorization = token
-		}
-	}
+local handleRatelimits, request do
+	local ratelimits = { }
+	local globalRatelimit = { }
+	function handleRatelimits(endpoint, ...)
 
-	if body then
-		reqt.headers["content-length"] = #body
-		reqt.source = ltn12.source.string(body)
+		if globalRatelimit.active then
+			if os.time() > globalRatelimit.reset then
+				globalRatelimit.active = false
+			else
+				return nil, "global ratelimit enforced"
+			end
+		end
+
+		endpoint = createEndpoint(endpoint, ...)
+		endpoint = endpoint:gsub(":id", "%d+")
+
+		local endpointLimits = ratelimits[endpoint]
+		if endpointLimits then
+			if os.time() > endpointLimits.reset then
+				endpointLimits.remaining = endpointLimits.limit
+			end
+
+			if endpointLimits.remaining - 1 < 0 then
+				return nil, "pre-emptive ratelimit"
+			end
+		else
+			-- new endpoint, treat it as if we haven't requested before
+			ratelimits[endpoint] = {remaining=0,limit=0,reset=0}
+		end
+
+		return true
 	end
 
-	local succ, code, headers = http.request(reqt)
+	local cookies = { }
+	function request(token, url, method, body, contentType)
+		local resp = {}
+		local reqt = {
+			url = url,
+			method = method or "GET",
+			sink = ltn12.sink.table(resp),
+			headers = {
+				["content-type"] = contentType or "application/json",
+				authorization = token,
+				cookie = table.concat(cookies, ";")
+			}
+		}
 
-	return table.concat(resp, ""), code, headers
+		if body then
+			reqt.headers["content-length"] = #body
+			reqt.source = ltn12.source.string(body)
+		end
+
+		local succ, code, headers = http.request(reqt)
+
+		if headers then
+			local new_cookies = headers["set-cookie"]
+			if new_cookies then
+				cookies[#cookies+1] = new_cookies
+			end
+
+			local limit = headers["x-ratelimit-limit"]
+			local remaining = headers["x-ratelimit-remaining"]
+			local reset = headers["x-ratelimit-reset"]
+			local global = headers["x-ratelimit-global"]
+			local retryAfter = headers["retry-after"]
+
+			if global == "true" then
+				globalRatelimit.reset = tonumber(retryAfter)
+				globalRatelimit.active = true
+			end
+
+			for endpoint, limits in pairs(ratelimits) do
+				if url:match(endpoint) then
+					limits.remaining = tonumber(remaining)
+					limits.reset = tonumber(reset)
+					limits.limit = tonumber(limit)
+					print("ratelimits for", endpoint, "remaining:", remaining, "reset:", reset, "limit:", limit)
+					break
+				end
+			end
+		end
+
+		if code == 429 then
+			print("------ HIT RATE LIMIT -----")
+		end
+
+		return table.concat(resp, ""), code, headers
+	end
 end
 
 
@@ -62,6 +130,9 @@ function _M.getChannel(token, channel_id)
 	util.typecheck(1, token, "string")
 	util.typecheck(2, channel_id, "string")
 
+	local succ, ratelimited = handleRatelimits("/channels/%s", channel_id)
+	if not succ then return nil, ratelimited end
+
 	-- GET https://discordapp.com/api/v6/channels/1234567890
 	local response = request(token, createEndpoint("/channels/%s", channel_id))
 	return json.decode(response)
@@ -72,6 +143,9 @@ function _M.modifyChannel(token, channel_id, payload)
 	util.typecheck(2, channel_id, "string")
 	util.typecheck(3, payload, "table")
 
+	local succ, ratelimited = handleRatelimits("/channels/%s", channel_id)
+	if not succ then return nil, ratelimited end
+
 	-- PUT/PATCH https://discordapp.com/api/v6/channels/1234567890
 	local response = request(token, createEndpoint("/channels/%s", channel_id), "PATCH", json.encode(payload))
 	return json.decode(response)
@@ -80,6 +154,9 @@ end
 function _M.deleteChannel(token, channel_id)
 	util.typecheck(1, token, "string")
 	util.typecheck(2, channel_id, "string")
+
+	local succ, ratelimited = handleRatelimits("/channels/%s", channel_id)
+	if not succ then return nil, ratelimited end
 
 	-- PUT/PATCH https://discordapp.com/api/v6/channels/1234567890
 	local response = request(token, createEndpoint("/channels/%s", channel_id), "DELETE")
@@ -112,6 +189,9 @@ function _M.getChannelMessages(token, channel_id, around, before, after, limit)
 
 	limit = limit or 50
 
+	local succ, ratelimited = handleRatelimits("/channels/%s/messages", channel_id)
+	if not succ then return nil, ratelimited end
+
 	-- GET https://discordapp.com/api/v6/channels/1234567890/messages?(around|before|after)=1234567890&limit=50
 	local response = request(token, createEndpoint("/channels/%s/messages?%s=%s&limit=", channel_id, query, value, limit))
 	return json.decode(response)
@@ -121,6 +201,9 @@ function _M.getChannelMessage(token, channel_id, message_id)
 	util.typecheck(1, token, "string")
 	util.typecheck(2, channel_id, "string")
 	util.typecheck(3, message_id, "number")
+
+	local succ, ratelimited = handleRatelimits("/channels/%s/messages/:id", channel_id)
+	if not succ then return nil, ratelimited end
 
 	-- GET https://discordapp.com/api/v6/channels/1234567890/messages/1234567890
 	local response = request(token, createEndpoint("/channels/%s/messages/%s", channel_id, message_id))
@@ -136,6 +219,9 @@ function _M.createMessage(token, channel_id, payload)
 		error("message content must be provided", 2)
 	end
 
+	local succ, ratelimited = handleRatelimits("/channels/%s/messages", channel_id)
+	if not succ then return nil, ratelimited end
+
 	-- POST https://discordapp.com/api/v6/channels/1234567890/messages
 	local response = request(token, createEndpoint("/channels/%s/messages", channel_id), "POST", json.encode(payload))
 	return json.decode(response)
@@ -149,6 +235,9 @@ function _M.uploadFile(token, channel_id, payload)
 	if not payload.file then
 		error("file contents must be provided", 2)
 	end
+
+	local succ, ratelimited = handleRatelimits("/channels/%s/messages", channel_id)
+	if not succ then return nil, ratelimited end
 
 	-- TODO: this boundary should be randomly generated based on the payload
 	local boundary = ("---------------------------%s"):format(socket.gettime())
@@ -202,6 +291,9 @@ function _M.editMessage(token, channel_id, message_id, new_content)
 	util.typecheck(3, message_id, "number")
 	util.typecheck(4, new_content, "string")
 
+	local succ, ratelimited = handleRatelimits("/channels/%s/messages/:id", channel_id)
+	if not succ then return nil, ratelimited end
+
 	local payload = json.encode{content = new_content}
 
 	local response = request(token, createEndpoint("/channels/%s/messages/%s", channel_id, message_id), "PATCH", payload)
@@ -212,6 +304,9 @@ function _M.bulkDeleteMessages(token, channel_id, message_ids)
 	util.typecheck(1, token, "string")
 	util.typecheck(2, channel_id, "string")
 	util.typecheck(3, message_ids, "table")
+
+	local succ, ratelimited = handleRatelimits("/channels/%s/messages/bulk_delete", channel_id)
+	if not succ then return nil, ratelimited end
 
 	local payload = json.encode(message_ids)
 
@@ -235,6 +330,9 @@ function _M.editChannelPermissions(token, channel_id, overwrite_id, payload)
 	if payload.type ~= "member" and payload.type ~= "role" then
 		error("overwrite type must be 'member' or 'role'", 2)
 	end
+
+	local succ, ratelimited = handleRatelimits("/channels/%s/permissions/:id", channel_id)
+	if not succ then return nil, ratelimited end
 
 	local response, code = request(token, createEndpoint("channels/%s/permissions/%s", channel_id, overwrite_id), "PUT", json.encode(payload))
 	return code == 204 or json.decode(response)

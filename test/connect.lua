@@ -1,9 +1,9 @@
 package.path = package.path..";../src/?.lua"
 
 local oldprint = print
-function print(...)
+function _G.print(...)
 	local message, thread, socket = ...
-	if type(message) == "string" and type(thread) == "thread" and type(socket) == "userdata" then
+	if type(message) == "string" and type(thread) == "thread" then
 		local trace = debug.traceback(thread, ("Error in socket %s: %s"):format(tostring(socket), message))
 		print(trace)
 	else
@@ -25,9 +25,15 @@ local client = discord.client.new(token)
 client:on("message_receive", function(client, message)
 	print("Message:", message.content)
 	if message.content:match("^!ping") then
-		api.createMessage(client.priv.token, message.channel_id, {
-			content = ("Hello, world! This is %s. My gateway latency is %0.2fms"):format(discord._VERSION, client.latency * 1000)
-		})
+		for i = 1, 100 do
+			local succ, err = api.createMessage(client.priv.token, message.channel_id, {
+				content = ("Hello, world! This is %s. My gateway latency is %0.2fms"):format(discord._VERSION, client.latency * 1000)
+			})
+			if not succ then
+				print("failed to send message:", err)
+				break;
+			end
+		end
 	end
 end)
 

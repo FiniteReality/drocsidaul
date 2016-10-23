@@ -12,10 +12,10 @@
 - Lua > 5.1
 - luarocks
 - lua-websockets (scm-1)
+- copas
 
 These dependencies can be downloaded using luarocks:
 
-- copas
 - lua-cjson
 - luasec
 - lzlib
@@ -25,6 +25,13 @@ To install lua-websockets *correctly*, you need to install libev and run this co
 ```shell
 $luarocks install https://raw.githubusercontent.com/lipp/lua-websockets/master/rockspecs/lua-websockets-scm-1.rockspec
 ```
+
+The version of copas used has been modified - to install it you should use:
+
+```shell
+$luarocks install https://raw.githubusercontent.com/FiniteReality/copas/master/rockspec/copas-cvs-4.rockspec
+```
+
 
 ## Usage ##
 

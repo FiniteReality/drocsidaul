@@ -127,7 +127,8 @@ function client_methd:think()
 end
 
 function client_methd:run(timeout)
-	timeout = timeout or 1
+	--timeout = timeout or 1
+
 	copas.addthread(function()
 		assert(self:connect())
 		while self.connecting or self.connected do
@@ -135,7 +136,6 @@ function client_methd:run(timeout)
 			if not succ then
 				error(string.format("Server sent close %s (%s) (%s)", close_code, (close_reason or "unknown"), (close_clean and "clean" or "unclean")))
 			end
-			-- ensure other threads can run
 			copas.sleep(0)
 		end
 	end)

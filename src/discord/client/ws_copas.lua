@@ -12,11 +12,11 @@ local new = function(ws)
   local self = {}
   
   self.sock_connect = function(self,host,port)
-    self.sock = socket.tcp()
-    if ws.timeout ~= nil then
-      self.sock:settimeout(ws.timeout or 0)
-    end
-    local _,err = copas.connect(self.sock,host,port)
+    self.sock = copas.wrap(socket.tcp())
+    self.sock:settimeout(ws and ws.timeout or 0)
+    function self.sock:getfd(...) return self.socket:getfd(...) end
+    function self.sock:setfd(...) return self.socket:setfd(...) end
+    local _,err = self.sock:connect(host,port)
     if err and err ~= 'already connected' then
       self.sock:close()
       return nil,err
@@ -24,11 +24,11 @@ local new = function(ws)
   end
   
   self.sock_send = function(self,...)
-    return copas.send(self.sock,...)
+    return self.sock:send(...)
   end
   
   self.sock_receive = function(self,...)
-    return copas.receive(self.sock,...)
+    return self.sock:receive(...)
   end
   
   self.sock_close = function(self)
