@@ -1,6 +1,7 @@
 local discord = require("discord.module")
 local json = require("discord.json")
 local util = require("discord.util")
+local date = require("discord.date")
 
 local socket = require("socket")
 local http = require("copas.http")
@@ -29,7 +30,7 @@ local handleRatelimits, request do
 	function handleRatelimits(endpoint, ...)
 
 		if globalRatelimit.active then
-			if os.time() > globalRatelimit.reset then
+			if (os.time() - endpointLimits.start) > endpointLimits.reset then
 				globalRatelimit.active = false
 			else
 				return nil, "global ratelimit enforced"
@@ -41,7 +42,7 @@ local handleRatelimits, request do
 
 		local endpointLimits = ratelimits[endpoint]
 		if endpointLimits then
-			if os.time() > endpointLimits.reset then
+			if (os.time() - endpointLimits.start) > endpointLimits.reset then
 				endpointLimits.remaining = endpointLimits.limit
 			end
 
@@ -50,10 +51,14 @@ local handleRatelimits, request do
 			end
 		else
 			-- new endpoint, treat it as if we haven't requested before
-			ratelimits[endpoint] = {remaining=0,limit=0,reset=0}
+			ratelimits[endpoint] = {remaining=0,limit=0,reset=0,start=0}
 		end
 
 		return true
+	end
+
+	local function parseHttpDate(str)
+		return date.diff(date(str), date.epoch()):spanseconds()
 	end
 
 	local cookies = { }
@@ -77,6 +82,9 @@ local handleRatelimits, request do
 
 		local succ, code, headers = http.request(reqt)
 
+		-- TODO: will this fail in the case we fail to pre-emptively
+		-- ratelimit and a 429 is issued?
+
 		if headers then
 			local new_cookies = headers["set-cookie"]
 			if new_cookies then
@@ -88,25 +96,25 @@ local handleRatelimits, request do
 			local reset = headers["x-ratelimit-reset"]
 			local global = headers["x-ratelimit-global"]
 			local retryAfter = headers["retry-after"]
+			local httpDate = parseHttpDate(headers["date"])
 
 			if global == "true" then
-				globalRatelimit.reset = tonumber(retryAfter)
+				globalRatelimit.start = os.time()
+				globalRatelimit.reset = os.difftime(tonumber(retryAfter), httpDate)
 				globalRatelimit.active = true
 			end
 
-			for endpoint, limits in pairs(ratelimits) do
-				if url:match(endpoint) then
-					limits.remaining = tonumber(remaining)
-					limits.reset = tonumber(reset)
-					limits.limit = tonumber(limit)
-					print("ratelimits for", endpoint, "remaining:", remaining, "reset:", reset, "limit:", limit)
-					break
+			if limit and remaining and reset then
+				for endpoint, limits in pairs(ratelimits) do
+					if url:match(endpoint) then
+						limits.remaining = tonumber(remaining)
+						limits.start = os.time()
+						limits.reset = os.difftime(tonumber(reset), httpDate)
+						limits.limit = tonumber(limit)
+						break
+					end
 				end
 			end
-		end
-
-		if code == 429 then
-			print("------ HIT RATE LIMIT -----")
 		end
 
 		return table.concat(resp, ""), code, headers

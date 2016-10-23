@@ -58,6 +58,7 @@ function client.new(token, tokenType)
 				servers=nil
 			},
 			events = {
+				connect={},
 				message_receive={},
 				message_update={},
 				message_delete={}

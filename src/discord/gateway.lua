@@ -15,6 +15,7 @@ end
 
 function _M.handleDispatch(client, dispatch, data)
 	if dispatch == "READY" then
+		invoke_callback(client, "connect", data._trace)
 		copas.addthread(function()
 			while client.connected or client.connecting do
 				if client.sending_heartbeat then

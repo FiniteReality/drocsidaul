@@ -1,5 +1,7 @@
 package.path = package.path..";../src/?.lua"
 
+local gettime = require("socket").gettime
+
 local oldprint = print
 function _G.print(...)
 	local message, thread, socket = ...
@@ -21,17 +23,26 @@ local token = f:read("*a")
 f:close()
 
 local client = discord.client.new(token)
+local start
+
+client:on("connect", function(client, servers)
+	print("Connected to discord in", gettime() - start, "seconds")
+	print("Connected to", table.concat(servers, ", "))
+end)
 
 client:on("message_receive", function(client, message)
 	print("Message:", message.content)
 	if message.content:match("^!ping") then
+		local firstFailed = false
 		for i = 1, 100 do
 			local succ, err = api.createMessage(client.priv.token, message.channel_id, {
 				content = ("Hello, world! This is %s. My gateway latency is %0.2fms"):format(discord._VERSION, client.latency * 1000)
 			})
 			if not succ then
-				print("failed to send message:", err)
-				break;
+				if not firstFailed then
+					firstFailed = true
+					print("failed to send message:", err)
+				end
 			end
 		end
 	end
@@ -45,4 +56,5 @@ client:on("message_delete", function(client, message)
 	print("Message delete:", message.content)
 end)
 
+start = gettime()
 client:run()
