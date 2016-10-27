@@ -7,20 +7,8 @@ local socket = require("socket")
 local http = require("copas.http")
 local multipart = require("multipart")
 
-if not multipart.set_file then
-	--TODO: Should I PR this to the main lib?
-	function multipart:set_file(name, file_name, file_contents)
-		self:add_simple(name, file_name)
-		local data = self:get(name)
-		data.value = file_contents
-		data.headers[1] = data.headers[1] .. "; filename=\""..file_name.."\""
-		data.headers[#data.headers+1] = "Content-Type: application/octet-stream"
-	end
-end
-
-
 local _M = { }
-_M.BASE_URL = "http://discordapp.com/api%s"
+_M.BASE_URL = "https://discordapp.com/api%s"
 _M.API_VERSION = 6
 
 http.TIMEOUT = 60
@@ -28,8 +16,6 @@ http.USERAGENT = ("DiscordBot (%s, %s)"):format(discord._URL, discord._VERSION)
 
 local handleRatelimits, request do
 	local function createEndpoint(endpoint, ...)
-		util.typecheck(1, endpoint, "string")
-
 		if _M.API_VERSION <= 4 then
 			return _M.BASE_URL:format(("%s?v=%d"):format(endpoint:format(...), _M.API_VERSION))
 		else
@@ -59,7 +45,7 @@ local handleRatelimits, request do
 			end
 		else
 			-- new endpoint, treat it as if we haven't requested before
-			ratelimits[endpoint] = {remaining=0,limit=0,reset=0,start=0}
+			ratelimits[route] = {remaining=0,limit=0,reset=0,start=0}
 		end
 
 		return true
@@ -93,8 +79,7 @@ local handleRatelimits, request do
 		local ok, err = handleRatelimits(builtRoute)
 		if not ok then return nil, err end
 
-
-		if body then
+		if payload then
 			reqt.headers["content-length"] = #payload
 			reqt.source = ltn12.source.string(payload)
 		end
@@ -121,7 +106,7 @@ local handleRatelimits, request do
 			end
 
 			if limit and remaining and reset then
-				local limits = ratelimits[route]
+				local limits = ratelimits[builtRoute]
 				limits.remaining = tonumber(remaining)
 				limits.start = os.time()
 				limits.reset = os.difftime(tonumber(reset), httpDate)
@@ -131,7 +116,8 @@ local handleRatelimits, request do
 
 		resp = table.concat(resp, "")
 
-		return pcall(json.decode, resp), code, headers
+		local succ, data = pcall(json.decode, resp)
+		return succ, data, code, headers
 	end
 end
 
@@ -170,12 +156,14 @@ function _M.createMessage(token, channel, payload)
 end
 
 function _M.uploadFile(token, channel, payload)
+	return error("not yet implemented", 2)
+	--[[
 	local data = multipart.new()
 	data._boundary = string.format("%s%s", string.rep("-", 10), socket.gettime() * 10000)
 	local contentType = string.format("multipart/form-data; boundary=%s", data._boundary)
 
 	for i, v in pairs(payload) do
-		if i == "content" then
+		if i == "file" then
 			data:set_file(i, v.name, v.contents)
 		else
 			data:set_simple(i, v)
@@ -183,6 +171,7 @@ function _M.uploadFile(token, channel, payload)
 	end
 
 	return request("POST", {"/channels/%s/messages", channel}, token, data:tostring(), contentType)
+	]]
 end
 
 function _M.editMessage(token, channel, message, payload)
@@ -438,7 +427,7 @@ function _M.modifyWebhookWithToken(webhook, webhookToken, payload)
 end
 
 function _M.deleteWebhook(token, webhook)
-	return request("DELETE", {"/webhooks/%%s", webhook}, token
+	return request("DELETE", {"/webhooks/%%s", webhook}, token)
 end
 
 function _M.deleteWebhookWithToken(webhook, webhookToken)

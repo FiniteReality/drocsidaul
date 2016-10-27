@@ -1,7 +1,7 @@
 local socket = require("socket")
 local copas = require("copas")
+local json = require("cjson")
 
-local json = require("discord.json")
 local OPCODES = require("discord.client.opcodes")
 local cache = require("discord.client.cache")
 

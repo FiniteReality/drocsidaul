@@ -86,7 +86,9 @@ end
 function client_methd:connect(sslparams)
 	self.connecting = true
 	if not self.caches.gateway_uri then
-		self.caches.gateway_uri = rest.getGatewayUri()
+		local succ, data = rest.getGateway(self.priv.token)
+		self.caches.gateway_uri = ("%s/?v=%s&encoding=json"):format(data.url, rest.API_VERSION)
+		print(self.caches.gateway_uri)
 	end
 
 	local succ, err = self.priv.websocket:connect(self.caches.gateway_uri, nil, sslparams or client.SSLPARAMS)

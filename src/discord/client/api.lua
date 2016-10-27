@@ -2,8 +2,8 @@ local discord = require("discord.module")
 
 local websocket = require("websocket")
 local zlib = require("zlib")
+local json = require("cjson")
 
-local json = require("discord.json")
 local OPCODES = require("discord.client.opcodes")
 
 local _M = {}

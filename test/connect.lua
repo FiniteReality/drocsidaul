@@ -16,7 +16,7 @@ end
 local copas = require("copas")
 
 local discord = require("discord")
-local api = require("discord.api")
+local rest = require("discord.rest")
 
 local f = io.open("token.data.txt", "r")
 local token = f:read("*a")
@@ -35,20 +35,16 @@ client:on("message_receive", function(client, message)
 	if message.content:match("^!ping") then
 		local firstFailed = false
 		--for i = 1, 100 do
-			local succ, err = api.uploadFile(client.priv.token, message.channel_id, {
-				--content = ("%s - %s"):format(discord._VERSION, client.latency),
-				file = {
-					name = "test.txt",
-					contents = "Hello, world!"
-				}
+			local succ, msg, code = rest.createMessage(client.priv.token, message.channel_id, {
+				content = ("%s - %s"):format(discord._VERSION, client.latency),
 			})
 			if not succ then
 				if not firstFailed then
 					firstFailed = true
-					print("failed to send message:", err)
+					print("failed to send message:", msg, code)
 				end
 			else
-				for i, v in pairs(succ) do
+				for i, v in pairs(msg) do
 					print(i, v)
 				end
 			end
