@@ -19,6 +19,8 @@ These dependencies can be downloaded using luarocks:
 - lua-cjson
 - luasec
 - lzlib
+- date
+- multipart
 
 To install lua-websockets *correctly*, you need to install libev and run this command:
 

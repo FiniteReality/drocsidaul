@@ -34,17 +34,25 @@ client:on("message_receive", function(client, message)
 	print("Message:", message.content)
 	if message.content:match("^!ping") then
 		local firstFailed = false
-		for i = 1, 100 do
-			local succ, err = api.createMessage(client.priv.token, message.channel_id, {
-				content = ("Hello, world! This is %s. My gateway latency is %0.2fms"):format(discord._VERSION, client.latency * 1000)
+		--for i = 1, 100 do
+			local succ, err = api.uploadFile(client.priv.token, message.channel_id, {
+				--content = ("%s - %s"):format(discord._VERSION, client.latency),
+				file = {
+					name = "test.txt",
+					contents = "Hello, world!"
+				}
 			})
 			if not succ then
 				if not firstFailed then
 					firstFailed = true
 					print("failed to send message:", err)
 				end
+			else
+				for i, v in pairs(succ) do
+					print(i, v)
+				end
 			end
-		end
+		--end
 	end
 end)
 

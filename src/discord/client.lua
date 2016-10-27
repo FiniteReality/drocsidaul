@@ -1,5 +1,5 @@
 local util = require("discord.util")
-local api = require("discord.api")
+local rest = require("discord.rest")
 local gateway = require("discord.gateway")
 
 local websocket = require("websocket")
@@ -86,7 +86,7 @@ end
 function client_methd:connect(sslparams)
 	self.connecting = true
 	if not self.caches.gateway_uri then
-		self.caches.gateway_uri = api.getGatewayUri(self.priv.token, "json")
+		self.caches.gateway_uri = rest.getGatewayUri()
 	end
 
 	local succ, err = self.priv.websocket:connect(self.caches.gateway_uri, nil, sslparams or client.SSLPARAMS)

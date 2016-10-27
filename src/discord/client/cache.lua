@@ -1,3 +1,5 @@
+local json = require("cjson")
+
 local _M = {}
 
 function _M.addGeneric(cache, entities)
@@ -15,14 +17,22 @@ function _M.updateGeneric(cache, entities)
 	if entities.id then
 		local cachedEntity = cache[entities.id]
 		for i, v in pairs(entities) do
-			cachedEntity[i] = v
+			if v == json.null then
+				cachedEntity[i] = nil
+			else
+				cachedEntity[i] = v
+			end
 		end
 	else
 		for i = 1, #entities do
 			local entity = entities[i]
 			local cachedEntity = cache[entity.id]
 			for i, v in pairs(entity) do
-				cachedEntity[i] = v
+				if v == json.null then
+					cachedEntity[i] = nil
+				else
+					cachedEntity[i] = v
+				end
 			end
 		end
 	end
